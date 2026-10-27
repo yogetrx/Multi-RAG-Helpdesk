@@ -1,0 +1,14 @@
+IT Support Procedure
+
+Problem:
+An employee reports an unresolved technical issue.
+
+Procedure:
+1. Record the error message and relevant timestamps.
+2. Check existing troubleshooting documentation.
+3. Collect diagnostic information without exposing secrets.
+4. Escalate unresolved issues to the responsible support team.
+5. Document the resolution.
+
+Security:
+Do not request passwords or expose confidential information in support tickets.

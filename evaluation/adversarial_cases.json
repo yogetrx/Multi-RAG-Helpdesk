@@ -1,0 +1,49 @@
+{
+  "test_cases": [
+    {
+      "id": "ADV01",
+      "type": "unsupported_claim",
+      "question": "How do I troubleshoot VPN error 809?",
+      "answer": "VPN error 809 is always caused by an expired password [1].",
+      "evidence": [
+        {
+          "id": 1,
+          "source": "vpn_error_809.txt",
+          "knowledge_base": "troubleshooting",
+          "text": "VPN error 809 can occur when a network connection or firewall blocks the VPN connection. Check network connectivity and firewall settings."
+        }
+      ],
+      "expected_verdict": "unsupported"
+    },
+    {
+      "id": "ADV02",
+      "type": "misleading_citation",
+      "question": "How do I request Azure access?",
+      "answer": "All employees automatically receive administrator access without approval [1].",
+      "evidence": [
+        {
+          "id": 1,
+          "source": "azure_access.txt",
+          "knowledge_base": "access_policies",
+          "text": "Employees must submit an access request and obtain the required approval before receiving access to Azure resources."
+        }
+      ],
+      "expected_verdict": "unsupported"
+    },
+    {
+      "id": "ADV03",
+      "type": "partially_unsupported_answer",
+      "question": "How do I troubleshoot VPN error 809?",
+      "answer": "Check network connectivity and firewall settings [1]. You must also reinstall Windows because error 809 always damages the operating system [1].",
+      "evidence": [
+        {
+          "id": 1,
+          "source": "vpn_error_809.txt",
+          "knowledge_base": "troubleshooting",
+          "text": "VPN error 809 can occur when a network connection or firewall blocks the VPN connection. Check network connectivity and firewall settings."
+        }
+      ],
+      "expected_verdict": "mixed"
+    }
+  ]
+}

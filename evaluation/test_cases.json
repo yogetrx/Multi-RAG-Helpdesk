@@ -1,0 +1,105 @@
+
+{
+  "test_cases": [
+    {
+      "question": "What should I do when VPN error 809 occurs?",
+      "expected_knowledge_bases": ["troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt"]
+    },
+    {
+      "question": "How do I request access to Azure resources?",
+      "expected_knowledge_bases": ["access_policies"],
+      "expected_sources": ["azure_access.txt"]
+    },
+    {
+      "question": "My VPN is broken and I need Azure access",
+      "expected_knowledge_bases": ["troubleshooting", "access_policies"],
+      "expected_sources": ["vpn_error_809.txt", "azure_access.txt"]
+    },
+    {
+      "question": "I'm getting error 809 when connecting to my VPN",
+      "expected_knowledge_bases": ["troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt"]
+    },
+    {
+      "question": "My VPN connection keeps failing. How can I fix it?",
+      "expected_knowledge_bases": ["troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt"]
+    },
+    {
+      "question": "What causes VPN error 809?",
+      "expected_knowledge_bases": ["troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt"]
+    },
+    {
+      "question": "I cannot establish a VPN connection",
+      "expected_knowledge_bases": ["troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt"]
+    },
+    {
+      "question": "How can I troubleshoot my VPN issue?",
+      "expected_knowledge_bases": ["troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt"]
+    },
+    {
+      "question": "What is the procedure for requesting Azure permissions?",
+      "expected_knowledge_bases": ["access_policies"],
+      "expected_sources": ["azure_access.txt"]
+    },
+    {
+      "question": "I need permission to use an Azure resource",
+      "expected_knowledge_bases": ["access_policies"],
+      "expected_sources": ["azure_access.txt"]
+    },
+    {
+      "question": "Where can I find the Azure access policy?",
+      "expected_knowledge_bases": ["access_policies"],
+      "expected_sources": ["azure_access.txt"]
+    },
+    {
+      "question": "How do I get authorized to access Azure?",
+      "expected_knowledge_bases": ["access_policies"],
+      "expected_sources": ["azure_access.txt"]
+    },
+    {
+      "question": "Explain the IT support procedure",
+      "expected_knowledge_bases": ["it_documentation"],
+      "expected_sources": ["support_procedure.txt"]
+    },
+    {
+      "question": "Where can I find the support documentation?",
+      "expected_knowledge_bases": ["it_documentation"],
+      "expected_sources": ["support_procedure.txt"]
+    },
+    {
+      "question": "My VPN is failing and I need permission to access Azure",
+      "expected_knowledge_bases": ["troubleshooting", "access_policies"],
+      "expected_sources": ["vpn_error_809.txt", "azure_access.txt"]
+    },
+    {
+      "question": "I have a connectivity problem and an Azure permissions issue",
+      "expected_knowledge_bases": ["troubleshooting", "access_policies"],
+      "expected_sources": ["vpn_error_809.txt", "azure_access.txt"]
+    },
+    {
+      "question": "How do I fix VPN error 809 and follow the IT support process?",
+      "expected_knowledge_bases": ["it_documentation", "troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt", "support_procedure.txt"]
+    },
+    {
+      "question": "I need Azure access and want to know the support procedure",
+      "expected_knowledge_bases": ["access_policies", "it_documentation"],
+      "expected_sources": ["azure_access.txt", "support_procedure.txt"]
+    },
+    {
+      "question": "My VPN has error 809. Where should I look for troubleshooting instructions?",
+      "expected_knowledge_bases": ["troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt"]
+    },
+    {
+      "question": "I cannot connect to the VPN and need help finding the right IT documentation",
+      "expected_knowledge_bases": ["it_documentation", "troubleshooting"],
+      "expected_sources": ["vpn_error_809.txt", "support_procedure.txt"]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+Azure Access Policy
+
+Problem:
+An employee needs access to Azure resources.
+
+Procedure:
+1. Identify the resource and required task.
+2. Request the minimum required permissions.
+3. Obtain approval from the resource owner.
+4. Assign an appropriate Azure RBAC role.
+5. Review access periodically.
+
+Security:
+Never share credentials or grant broad permissions without justification.

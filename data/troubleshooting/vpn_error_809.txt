@@ -1,0 +1,15 @@
+VPN Error 809
+
+Problem:
+The VPN connection cannot be established.
+
+Possible causes:
+Network restrictions, firewall rules, or blocked VPN traffic.
+
+Recommended steps:
+1. Verify internet connectivity.
+2. Check whether the VPN server is reachable.
+3. Contact IT support if the issue continues.
+
+Escalation:
+Do not disable security controls without IT approval.

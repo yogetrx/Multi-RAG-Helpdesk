@@ -1,0 +1,23 @@
+
+{
+  "test_cases": [
+    {
+      "id": "A01",
+      "question": "What should I do when VPN error 809 occurs?",
+      "expected_source": "vpn_error_809.txt",
+      "expected_facts": ["809"]
+    },
+    {
+      "id": "A02",
+      "question": "How do I request access to Azure resources?",
+      "expected_source": "azure_access.txt",
+      "expected_facts": ["access"]
+    },
+    {
+      "id": "A03",
+      "question": "Explain the IT support procedure.",
+      "expected_source": "support_procedure.txt",
+      "expected_facts": ["support"]
+    }
+  ]
+}

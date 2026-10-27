@@ -1,0 +1,30 @@
+
+{
+  "test_cases": [
+    {
+      "id": "U01",
+      "question": "What is the company's annual employee bonus percentage?",
+      "expected_behavior": "abstain"
+    },
+    {
+      "id": "U02",
+      "question": "What are the company's annual salary increments for each job level?",
+      "expected_behavior": "abstain"
+    },
+    {
+      "id": "U03",
+      "question": "What time does the company cafeteria open?",
+      "expected_behavior": "abstain"
+    },
+    {
+      "id": "U04",
+      "question": "What is the company's official work-from-home allowance?",
+      "expected_behavior": "abstain"
+    },
+    {
+      "id": "U05",
+      "question": "Who is the company's CEO?",
+      "expected_behavior": "abstain"
+    }
+  ]
+}

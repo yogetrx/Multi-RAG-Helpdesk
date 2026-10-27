@@ -1,0 +1,22 @@
+{
+  "test_cases": [
+    {
+      "id": "G01",
+      "question": "How do I troubleshoot VPN error 809?",
+      "expected_behavior": "answer",
+      "expected_source": "vpn_error_809.txt"
+    },
+    {
+      "id": "G02",
+      "question": "How do I request Azure resource access?",
+      "expected_behavior": "answer",
+      "expected_source": "azure_access.txt"
+    },
+    {
+      "id": "G03",
+      "question": "What is the company's annual bonus percentage?",
+      "expected_behavior": "abstain",
+      "expected_source": null
+    }
+  ]
+}

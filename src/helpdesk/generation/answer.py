@@ -92,7 +92,7 @@ def generate_answer(query: str, evidence: list[dict]) -> dict:
     )
 
     # Extract token usage after the model call completes.
-    usage = response.usage
+    usage = getattr(response, "usage", None)
 
     token_usage = None
 

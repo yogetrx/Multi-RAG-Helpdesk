@@ -108,3 +108,38 @@ def test_answer_marks_uncited_answer_not_grounded():
 
     assert response["grounded"] is False
     assert response["citations"][0]["source"] == "vpn.txt"
+
+def test_answer_marks_unsupported_response_not_grounded():
+    evidence = [{
+        "text": "Azure access policies and VPN troubleshooting.",
+        "source": "support.txt",
+        "knowledge_base": "it_documentation",
+        "score": 0.8,
+    }]
+
+    fake_response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=(
+                        "The exact employee bonus percentage cannot be "
+                        "determined from the provided evidence. [1]"
+                    )
+                )
+            )
+        ]
+    )
+
+    with patch(
+        "helpdesk.generation.answer.OpenAI"
+    ) as mock_openai:
+        client = mock_openai.return_value
+        client.chat.completions.create.return_value = fake_response
+
+        response = generate_answer(
+            "What is the exact employee bonus percentage for this year?",
+            evidence,
+        )
+
+    assert response["grounded"] is False
+    assert "cannot be determined" in response["answer"]

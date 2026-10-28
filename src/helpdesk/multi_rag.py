@@ -1,15 +1,22 @@
 
+import os
 from pathlib import Path
 
 from sentence_transformers import SentenceTransformer
-from helpdesk.retrieval.fusion import fuse_results
+
 from helpdesk.ingestion import load_documents
+from helpdesk.retrieval.fusion import fuse_results
 from helpdesk.retrieval.vector_store import VectorStore
 from helpdesk.router import select_knowledge_bases
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
+
+# Initial threshold; calibrate using evaluation results.
+MIN_RELEVANCE_SCORE = float(
+    os.getenv("RAG_MIN_RELEVANCE_SCORE", "0.30")
+)
 
 KNOWLEDGE_BASES = {
     "troubleshooting": DATA_DIR / "troubleshooting",
@@ -30,7 +37,6 @@ class MultiRAG:
             store.add_documents(documents)
             self.stores[name] = store
 
-    
     def search(
         self,
         query: str,
@@ -40,7 +46,6 @@ class MultiRAG:
         if not query or not query.strip():
             return []
 
-        # Automatically route unless the caller explicitly selects sources.
         selected = (
             knowledge_bases
             if knowledge_bases is not None
@@ -57,5 +62,15 @@ class MultiRAG:
                 self.stores[name].search(query, top_k=top_k)
             )
 
-        return fuse_results(results, top_k=top_k)
+        # Discard weak matches before combining the evidence.
+        relevant_results = [
+            item
+            for item in results
+            if item.get("score", float("-inf"))
+            >= MIN_RELEVANCE_SCORE
+        ]
 
+        if not relevant_results:
+            return []
+
+        return fuse_results(relevant_results, top_k=top_k)

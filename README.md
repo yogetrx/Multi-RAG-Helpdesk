@@ -143,6 +143,57 @@ The values above are illustrative. Actual answers, citations, and token counts d
 
 The response includes the question, selected knowledge bases, generated answer, citations, grounding status, and token usage when available.
 
+
+## Running with Docker
+
+The project includes a portable Docker build using CPU-only PyTorch for semantic embedding generation and retrieval.
+
+### Prerequisites
+
+- Docker Desktop or Docker Engine
+- Azure OpenAI endpoint, API key, and deployment name
+
+### 1. Build the Docker image
+
+From the repository root:
+
+```powershell
+docker build --no-cache -f Dockerfile.portable -t multi-rag-helpdesk:latest .
+```
+
+### 2. Configure environment variables
+
+Create a local `.env` file using `.env.example` as a reference. Add the required Azure OpenAI configuration.
+
+**Never commit `.env` or expose API keys.**
+
+### 3. Run the container
+
+```powershell
+docker run --rm -p 8000:8000 --env-file .env multi-rag-helpdesk:latest
+```
+
+### 4. Verify the application
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+Interactive API documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+### Notes
+
+- The container uses CPU-only PyTorch and does not require a GPU.
+- The Docker image includes the application source code and sample knowledge-base documents.
+- Azure OpenAI credentials are supplied at runtime through environment variables.
+- The image must be built locally before the container can be started.
+
 ## Testing and Evaluation
 
 Run the automated test suite:

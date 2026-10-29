@@ -1,0 +1,14 @@
+FROM multi-rag-helpdesk:1.1
+
+WORKDIR /app
+
+ENV PYTHONPATH=/app/src
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY src/ ./src/
+COPY data/ ./data/
+
+EXPOSE 8000
+
+CMD ["uvicorn", "helpdesk.main:app", "--host", "0.0.0.0", "--port", "8000"]

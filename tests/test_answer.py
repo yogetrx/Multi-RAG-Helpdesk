@@ -1,4 +1,3 @@
-
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -31,6 +30,9 @@ def test_answer_includes_source_citations():
     ), patch(
         "helpdesk.generation.answer.settings.azure_openai_api_key",
         "test-api-key",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_chat_deployment",
+        "test-deployment",
     ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response
@@ -83,6 +85,9 @@ def test_answer_rejects_invalid_citation_ids():
     ), patch(
         "helpdesk.generation.answer.settings.azure_openai_api_key",
         "test-api-key",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_chat_deployment",
+        "test-deployment",
     ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response
@@ -90,7 +95,7 @@ def test_answer_rejects_invalid_citation_ids():
         response = generate_answer("VPN issue", evidence)
 
     assert response["grounded"] is False
-    assert "invalid citations" in response["answer"]
+    assert "invalid citations" in response["answer"].lower()
 
 
 def test_answer_marks_uncited_answer_not_grounded():
@@ -119,6 +124,9 @@ def test_answer_marks_uncited_answer_not_grounded():
     ), patch(
         "helpdesk.generation.answer.settings.azure_openai_api_key",
         "test-api-key",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_chat_deployment",
+        "test-deployment",
     ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response
@@ -158,6 +166,9 @@ def test_answer_marks_unsupported_response_not_grounded():
     ), patch(
         "helpdesk.generation.answer.settings.azure_openai_api_key",
         "test-api-key",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_chat_deployment",
+        "test-deployment",
     ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response
@@ -168,4 +179,5 @@ def test_answer_marks_unsupported_response_not_grounded():
         )
 
     assert response["grounded"] is False
-    assert "cannot be determined" in response["answer"]
+    assert "cannot be determined" in response["answer"].lower()
+    

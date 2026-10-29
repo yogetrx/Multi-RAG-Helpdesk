@@ -132,7 +132,10 @@ def test_answer_marks_unsupported_response_not_grounded():
 
     with patch(
         "helpdesk.generation.answer.OpenAI"
-    ) as mock_openai:
+    ) as mock_openai, patch(
+        "helpdesk.generation.answer.settings.azure_openai_endpoint",
+        "https://example.openai.azure.com/",
+    ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response
 

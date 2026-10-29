@@ -1,6 +1,6 @@
-import re
+
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from helpdesk.generation.answer import generate_answer
 
@@ -25,7 +25,13 @@ def test_answer_includes_source_citations():
 
     with patch(
         "helpdesk.generation.answer.OpenAI"
-    ) as mock_openai:
+    ) as mock_openai, patch(
+        "helpdesk.generation.answer.settings.azure_openai_endpoint",
+        "https://example.openai.azure.com/",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_api_key",
+        "test-api-key",
+    ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response
 
@@ -50,6 +56,7 @@ def test_answer_handles_empty_query():
     assert response["grounded"] is False
     assert response["citations"] == []
 
+
 def test_answer_rejects_invalid_citation_ids():
     evidence = [{
         "text": "Verify internet connectivity.",
@@ -70,7 +77,13 @@ def test_answer_rejects_invalid_citation_ids():
 
     with patch(
         "helpdesk.generation.answer.OpenAI"
-    ) as mock_openai:
+    ) as mock_openai, patch(
+        "helpdesk.generation.answer.settings.azure_openai_endpoint",
+        "https://example.openai.azure.com/",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_api_key",
+        "test-api-key",
+    ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response
 
@@ -100,7 +113,13 @@ def test_answer_marks_uncited_answer_not_grounded():
 
     with patch(
         "helpdesk.generation.answer.OpenAI"
-    ) as mock_openai:
+    ) as mock_openai, patch(
+        "helpdesk.generation.answer.settings.azure_openai_endpoint",
+        "https://example.openai.azure.com/",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_api_key",
+        "test-api-key",
+    ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response
 
@@ -108,6 +127,7 @@ def test_answer_marks_uncited_answer_not_grounded():
 
     assert response["grounded"] is False
     assert response["citations"][0]["source"] == "vpn.txt"
+
 
 def test_answer_marks_unsupported_response_not_grounded():
     evidence = [{
@@ -135,6 +155,9 @@ def test_answer_marks_unsupported_response_not_grounded():
     ) as mock_openai, patch(
         "helpdesk.generation.answer.settings.azure_openai_endpoint",
         "https://example.openai.azure.com/",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_api_key",
+        "test-api-key",
     ):
         client = mock_openai.return_value
         client.chat.completions.create.return_value = fake_response

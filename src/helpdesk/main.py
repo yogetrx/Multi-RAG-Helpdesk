@@ -1,6 +1,7 @@
 
 import os
 import secrets
+import hashlib
 from functools import lru_cache
 
 from fastapi import (
@@ -14,7 +15,6 @@ from fastapi.security import APIKeyHeader
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from helpdesk.generation.answer import generate_answer
 from helpdesk.multi_rag import MultiRAG
@@ -26,10 +26,22 @@ from helpdesk.schemas import (
 )
 
 
+# Identify clients using a SHA-256 hash of their API key.
+# This avoids using Azure's internal proxy IP addresses.
+def get_api_key_identity(request: Request) -> str:
+    api_key = request.headers.get("X-API-Key")
+
+    if not api_key:
+        return "anonymous"
+
+    return hashlib.sha256(
+        api_key.encode("utf-8")
+    ).hexdigest()
+
+
 # Initialize rate limiter.
-# Clients are identified using their IP address.
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=get_api_key_identity,
     storage_uri="memory://",
 )
 
@@ -37,8 +49,9 @@ limiter = Limiter(
 app = FastAPI(
     title="Multi-RAG IT Helpdesk Agent",
     description="Search multiple knowledge bases and return cited evidence.",
-    version="0.4.0",
+    version="0.5.0",
 )
+
 
 # Register SlowAPI with FastAPI.
 app.state.limiter = limiter

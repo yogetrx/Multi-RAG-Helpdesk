@@ -6,18 +6,33 @@ import helpdesk.main as main
 
 
 TEST_API_KEY = "MyHelpdeskLocalTestKey2026"
+RATE_LIMIT_TEST_API_KEY = "RateLimitOnlyTestKey2026"
 
 
 @pytest.fixture
 def client(monkeypatch, request):
-    monkeypatch.setenv("HELPDESK_API_KEY", TEST_API_KEY)
+    # Give the rate-limit test a separate API-key identity.
+    if request.node.name == "test_ask_rate_limit":
+        monkeypatch.setenv(
+            "HELPDESK_API_KEY",
+            RATE_LIMIT_TEST_API_KEY,
+        )
+    else:
+        monkeypatch.setenv(
+            "HELPDESK_API_KEY",
+            TEST_API_KEY,
+        )
 
     # Mock retrieval so tests don't call FAISS or Azure OpenAI.
     class FakeRAG:
         def search(self, question, knowledge_bases, top_k):
             return []
 
-    monkeypatch.setattr(main, "get_rag", lambda: FakeRAG())
+    monkeypatch.setattr(
+        main,
+        "get_rag",
+        lambda: FakeRAG(),
+    )
 
     monkeypatch.setattr(
         main,
@@ -30,23 +45,17 @@ def client(monkeypatch, request):
         },
     )
 
-    # Give the rate-limit test its own IP address.
-    if request.node.name == "test_ask_rate_limit":
-        test_client = TestClient(
-            main.app,
-            client=("198.51.100.10", 50000),
-        )
-    else:
-        test_client = TestClient(main.app)
-
-    return test_client
+    return TestClient(main.app)
 
 
 def test_ask_with_valid_api_key(client):
     response = client.post(
         "/ask",
         headers={"X-API-Key": TEST_API_KEY},
-        json={"question": "How do I troubleshoot VPN error 809?", "top_k": 3},
+        json={
+            "question": "How do I troubleshoot VPN error 809?",
+            "top_k": 3,
+        },
     )
 
     assert response.status_code == 200
@@ -55,7 +64,10 @@ def test_ask_with_valid_api_key(client):
 def test_ask_without_api_key(client):
     response = client.post(
         "/ask",
-        json={"question": "How do I troubleshoot VPN error 809?", "top_k": 3},
+        json={
+            "question": "How do I troubleshoot VPN error 809?",
+            "top_k": 3,
+        },
     )
 
     assert response.status_code == 401
@@ -66,7 +78,10 @@ def test_ask_with_invalid_api_key(client):
     response = client.post(
         "/ask",
         headers={"X-API-Key": "WrongTestKey123"},
-        json={"question": "How do I troubleshoot VPN error 809?", "top_k": 3},
+        json={
+            "question": "How do I troubleshoot VPN error 809?",
+            "top_k": 3,
+        },
     )
 
     assert response.status_code == 401
@@ -95,12 +110,13 @@ def test_ask_rate_limit(client):
     for _ in range(11):
         response = client.post(
             "/ask",
-            headers={"X-API-Key": TEST_API_KEY},
+            headers={"X-API-Key": RATE_LIMIT_TEST_API_KEY},
             json={
                 "question": "How do I troubleshoot VPN error 809?",
                 "top_k": 3,
             },
         )
+
         responses.append(response)
 
     # First 10 requests should be accepted.

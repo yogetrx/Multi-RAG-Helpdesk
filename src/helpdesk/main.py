@@ -1,7 +1,10 @@
 
+import os
+import secrets
 from functools import lru_cache
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import APIKeyHeader
 
 from helpdesk.generation.answer import generate_answer
 from helpdesk.multi_rag import MultiRAG
@@ -12,11 +15,42 @@ from helpdesk.schemas import (
     HealthResponse,
 )
 
+
 app = FastAPI(
     title="Multi-RAG IT Helpdesk Agent",
     description="Search multiple knowledge bases and return cited evidence.",
-    version="0.2.0",
+    version="0.3.0",
 )
+
+
+# API key is supplied through an environment variable.
+api_key_header = APIKeyHeader(
+    name="X-API-Key",
+    auto_error=False,
+)
+
+
+def verify_api_key(
+    api_key: str | None = Depends(api_key_header),
+) -> None:
+    expected_api_key = os.getenv("HELPDESK_API_KEY")
+
+    # Fail closed if the server has not been configured securely.
+    if not expected_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API authentication is not configured.",
+        )
+
+    # Reject missing or incorrect API keys.
+    if not api_key or not secrets.compare_digest(
+        api_key,
+        expected_api_key,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key.",
+        )
 
 
 @lru_cache(maxsize=1)
@@ -35,17 +69,23 @@ def root() -> dict:
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    return HealthResponse(status="ok", stage="retrieval-api")
+    return HealthResponse(
+        status="ok",
+        stage="retrieval-api",
+    )
 
 
-
-@app.post("/ask", response_model=AskResponse)
+@app.post(
+    "/ask",
+    response_model=AskResponse,
+    dependencies=[Depends(verify_api_key)],
+)
 def ask(request: AskRequest) -> AskResponse:
     question = request.question.strip()
 
     if not question:
         raise HTTPException(
-            status_code=422,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Question cannot be blank.",
         )
 
@@ -53,15 +93,20 @@ def ask(request: AskRequest) -> AskResponse:
 
     try:
         rag = get_rag()
+
         evidence = rag.search(
             question,
             knowledge_bases=selected,
             top_k=request.top_k,
         )
+
         response = generate_answer(question, evidence)
 
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
     return AskResponse(
         question=question,

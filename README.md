@@ -41,6 +41,94 @@ Azure OpenAI Answer Generation
 Answer + Citations + Token Usage
 ```
 
+## API Security and Rate Limiting
+
+### 1. API Key Authentication
+
+The `/ask` endpoint is protected using API-key authentication.
+
+Clients must provide a valid API key through the `X-API-Key` HTTP request header.
+
+**Example request header:**
+
+```http
+X-API-Key: YOUR_API_KEY
+```
+
+The application:
+- Reads the expected API key from the `HELPDESK_API_KEY` environment variable.
+- Rejects missing or invalid API keys with HTTP `401 Unauthorized`.
+- Returns HTTP `503 Service Unavailable` if API authentication is not configured.
+- Uses `secrets.compare_digest()` for constant-time API-key comparison.
+
+The API key is stored as an Azure Container Apps secret and referenced through an environment variable.
+
+### 2. Rate Limiting
+
+The application uses **SlowAPI** to protect the `/ask` endpoint from excessive requests.
+
+| Configuration | Value |
+|---|---|
+| Rate limit | 10 requests |
+| Time window | 1 minute |
+| Rate-limit identity | SHA-256 hash of API key |
+| Storage backend | In-memory |
+| Exceeding limit | HTTP 429 |
+
+The rate limiter identifies clients using a SHA-256 hash of their API key instead of relying on the source IP address.
+
+This avoids treating different internal proxy addresses as separate clients.
+
+### 3. Rate-Limit Response
+
+When a client exceeds the configured limit, the application returns:
+
+```http
+HTTP/1.1 429 Too Many Requests
+```
+
+This prevents additional requests from being processed during the restricted period.
+
+### 4. Testing and Verification
+
+Automated tests verify:
+
+- Valid API-key authentication.
+- Missing API-key rejection.
+- Invalid API-key rejection.
+- Missing server-side authentication configuration.
+- Rate-limit enforcement.
+
+**Production verification:**
+
+The deployed Azure Container Apps endpoint was tested with 11 consecutive requests.
+
+| Request range | HTTP status | Result |
+|---|---:|---|
+| Requests 1–10 | 200 | Accepted |
+| Request 11 | 429 | Rejected |
+
+The production logs also confirmed the `429 Too Many Requests` response.
+
+### 5. Current Limitations
+
+The current implementation uses in-memory rate-limit storage.
+
+Consequently:
+- Rate-limit counters are not shared between multiple application replicas.
+- Counters reset when the application process restarts.
+- Multiple application instances can enforce separate quotas.
+
+For a distributed production deployment, Redis or an API gateway such as Azure API Management can provide centralized rate limiting.
+
+### 6. Security Considerations
+
+- Never commit API keys or secrets to GitHub.
+- Store production secrets using Azure Container Apps secrets.
+- Use HTTPS for API communication.
+- Keep authentication and rate-limiting configuration outside application source code.
+
+
 ## Knowledge Bases
 
 The sample IT helpdesk knowledge bases cover:

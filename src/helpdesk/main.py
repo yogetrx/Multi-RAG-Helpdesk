@@ -3,8 +3,18 @@ import os
 import secrets
 from functools import lru_cache
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    status,
+)
 from fastapi.security import APIKeyHeader
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from helpdesk.generation.answer import generate_answer
 from helpdesk.multi_rag import MultiRAG
@@ -16,10 +26,26 @@ from helpdesk.schemas import (
 )
 
 
+# Initialize rate limiter.
+# Clients are identified using their IP address.
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri="memory://",
+)
+
+
 app = FastAPI(
     title="Multi-RAG IT Helpdesk Agent",
     description="Search multiple knowledge bases and return cited evidence.",
-    version="0.3.0",
+    version="0.4.0",
+)
+
+# Register SlowAPI with FastAPI.
+app.state.limiter = limiter
+
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
 )
 
 
@@ -80,8 +106,9 @@ def health() -> HealthResponse:
     response_model=AskResponse,
     dependencies=[Depends(verify_api_key)],
 )
-def ask(request: AskRequest) -> AskResponse:
-    question = request.question.strip()
+@limiter.limit("10/minute")
+def ask(request: Request, payload: AskRequest) -> AskResponse:
+    question = payload.question.strip()
 
     if not question:
         raise HTTPException(
@@ -97,7 +124,7 @@ def ask(request: AskRequest) -> AskResponse:
         evidence = rag.search(
             question,
             knowledge_bases=selected,
-            top_k=request.top_k,
+            top_k=payload.top_k,
         )
 
         response = generate_answer(question, evidence)

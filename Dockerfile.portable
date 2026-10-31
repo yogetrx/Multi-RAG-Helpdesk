@@ -8,15 +8,20 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src
 ENV PIP_NO_CACHE_DIR=1
 
-# Install CPU-only PyTorch first
-RUN pip install torch==2.15.0+cpu \
+# Install CPU-only PyTorch from the official PyTorch CPU index.
+RUN python -m pip install --no-cache-dir \
+    torch==2.15.0+cpu \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Install pinned dependencies without reinstalling PyTorch
+# Copy the pinned dependency list.
 COPY requirements-lock.txt .
-RUN grep -v '^torch==' requirements-lock.txt > /tmp/requirements-lock.txt \
-    && pip install -r /tmp/requirements-lock.txt
 
+# Install remaining pinned dependencies without reinstalling PyTorch.
+RUN grep -v '^torch==' requirements-lock.txt > /tmp/requirements-lock.txt \
+    && python -m pip install --no-cache-dir \
+       -r /tmp/requirements-lock.txt
+
+# Copy application source and knowledge-base data.
 COPY src/ ./src/
 COPY data/ ./data/
 

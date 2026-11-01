@@ -1,7 +1,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-
+import uuid
 import helpdesk.main as main
 
 
@@ -127,3 +127,24 @@ def test_ask_rate_limit(client):
 
     # The 11th request should be rejected.
     assert responses[10].status_code == 429
+
+def test_response_contains_valid_request_id(client):
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert "X-Request-ID" in response.headers
+
+    request_id = response.headers["X-Request-ID"]
+
+    # Verify that the request ID is a valid UUID.
+    uuid.UUID(request_id)
+
+
+def test_each_request_gets_unique_request_id(client):
+    first_response = client.get("/health")
+    second_response = client.get("/health")
+
+    first_id = first_response.headers["X-Request-ID"]
+    second_id = second_response.headers["X-Request-ID"]
+
+    assert first_id != second_id

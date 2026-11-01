@@ -8,6 +8,8 @@ faiss-cpu
 numpy
 pytest
 httpx
-
+slowapi
 # Embedding model
 sentence-transformers
+# Azure Application Insights and OpenTelemetry
+microsoft-opentelemetry==1.5.0

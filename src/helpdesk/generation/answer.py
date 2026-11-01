@@ -130,12 +130,6 @@ def generate_answer(query: str, evidence: list[dict]) -> dict:
             "total_tokens": usage.total_tokens,
         }
 
-        print(f"Input tokens: {usage.prompt_tokens}")
-        print(f"Output tokens: {usage.completion_tokens}")
-        print(f"Total tokens: {usage.total_tokens}")
-    else:
-        print("Token usage is not available.")
-
     answer = response.choices[0].message.content or ""
 
     # Validate generated citation references.

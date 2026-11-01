@@ -1,7 +1,13 @@
 
+import uuid
 import os
 import secrets
 import hashlib
+import logging
+import time
+import json
+
+from datetime import datetime, timezone
 from functools import lru_cache
 
 from fastapi import (
@@ -16,6 +22,9 @@ from fastapi.security import APIKeyHeader
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from opentelemetry import trace
+
+from helpdesk.observability import configure_observability
 from helpdesk.generation.answer import generate_answer
 from helpdesk.multi_rag import MultiRAG
 from helpdesk.router import select_knowledge_bases
@@ -26,8 +35,10 @@ from helpdesk.schemas import (
 )
 
 
-# Identify clients using a SHA-256 hash of their API key.
-# This avoids using Azure's internal proxy IP addresses.
+# --------------------------------------------------
+# API RATE LIMITING
+# --------------------------------------------------
+
 def get_api_key_identity(request: Request) -> str:
     api_key = request.headers.get("X-API-Key")
 
@@ -39,12 +50,24 @@ def get_api_key_identity(request: Request) -> str:
     ).hexdigest()
 
 
-# Initialize rate limiter.
 limiter = Limiter(
     key_func=get_api_key_identity,
     storage_uri="memory://",
 )
 
+
+# --------------------------------------------------
+# OPENTELEMETRY INITIALIZATION
+# --------------------------------------------------
+
+configure_observability()
+
+tracer = trace.get_tracer("helpdesk.rag")
+
+
+# --------------------------------------------------
+# FASTAPI APPLICATION
+# --------------------------------------------------
 
 app = FastAPI(
     title="Multi-RAG IT Helpdesk Agent",
@@ -53,7 +76,113 @@ app = FastAPI(
 )
 
 
-# Register SlowAPI with FastAPI.
+# --------------------------------------------------
+# STRUCTURED JSON LOGGING
+# --------------------------------------------------
+
+class JSONFormatter(logging.Formatter):
+
+    def format(self, record: logging.LogRecord) -> str:
+
+        log_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+
+        for field in (
+            "request_id",
+            "method",
+            "path",
+            "status",
+            "duration_seconds",
+            "stage",
+            "selected_knowledge_bases",
+            "evidence_count",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+        ):
+            if hasattr(record, field):
+                log_data[field] = getattr(record, field)
+
+        if record.exc_info:
+            log_data["exception"] = self.formatException(
+                record.exc_info
+            )
+
+        return json.dumps(log_data)
+
+
+# --------------------------------------------------
+# APPLICATION LOGGER
+# --------------------------------------------------
+
+handler = logging.StreamHandler()
+handler.setFormatter(JSONFormatter())
+
+logger = logging.getLogger("helpdesk")
+logger.setLevel(logging.INFO)
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.propagate = False
+
+
+# --------------------------------------------------
+# REQUEST ID AND REQUEST LOGGING MIDDLEWARE
+# --------------------------------------------------
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+
+    request_id = str(uuid.uuid4())
+    start_time = time.perf_counter()
+
+    request.state.request_id = request_id
+
+    try:
+
+        response = await call_next(request)
+
+        duration = time.perf_counter() - start_time
+
+        logger.info(
+            "HTTP request completed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "duration_seconds": round(duration, 4),
+            },
+        )
+
+        response.headers["X-Request-ID"] = request_id
+
+        return response
+
+    except Exception:
+
+        duration = time.perf_counter() - start_time
+
+        logger.exception(
+            "Unexpected HTTP request error",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "duration_seconds": round(duration, 4),
+            },
+        )
+
+        raise
+
+
+# --------------------------------------------------
+# SLOWAPI REGISTRATION
+# --------------------------------------------------
+
 app.state.limiter = limiter
 
 app.add_exception_handler(
@@ -62,7 +191,10 @@ app.add_exception_handler(
 )
 
 
-# API key is supplied through an environment variable.
+# --------------------------------------------------
+# API KEY AUTHENTICATION
+# --------------------------------------------------
+
 api_key_header = APIKeyHeader(
     name="X-API-Key",
     auto_error=False,
@@ -72,16 +204,15 @@ api_key_header = APIKeyHeader(
 def verify_api_key(
     api_key: str | None = Depends(api_key_header),
 ) -> None:
+
     expected_api_key = os.getenv("HELPDESK_API_KEY")
 
-    # Fail closed if the server has not been configured securely.
     if not expected_api_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="API authentication is not configured.",
         )
 
-    # Reject missing or incorrect API keys.
     if not api_key or not secrets.compare_digest(
         api_key,
         expected_api_key,
@@ -92,14 +223,23 @@ def verify_api_key(
         )
 
 
+# --------------------------------------------------
+# RAG INITIALIZATION
+# --------------------------------------------------
+
 @lru_cache(maxsize=1)
 def get_rag() -> MultiRAG:
-    # Initialize once, on the first /ask request.
+
     return MultiRAG()
 
 
+# --------------------------------------------------
+# API ENDPOINTS
+# --------------------------------------------------
+
 @app.get("/")
 def root() -> dict:
+
     return {
         "message": "Multi-RAG Helpdesk API is running.",
         "next_step": "Send a question to POST /ask.",
@@ -108,11 +248,16 @@ def root() -> dict:
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
+
     return HealthResponse(
         status="ok",
         stage="retrieval-api",
     )
 
+
+# --------------------------------------------------
+# ASK ENDPOINT
+# --------------------------------------------------
 
 @app.post(
     "/ask",
@@ -121,6 +266,10 @@ def health() -> HealthResponse:
 )
 @limiter.limit("10/minute")
 def ask(request: Request, payload: AskRequest) -> AskResponse:
+
+    pipeline_start = time.perf_counter()
+    request_id = request.state.request_id
+
     question = payload.question.strip()
 
     if not question:
@@ -129,20 +278,147 @@ def ask(request: Request, payload: AskRequest) -> AskResponse:
             detail="Question cannot be blank.",
         )
 
-    selected = select_knowledge_bases(question)
-
     try:
-        rag = get_rag()
 
-        evidence = rag.search(
-            question,
-            knowledge_bases=selected,
-            top_k=payload.top_k,
+        # ------------------------------------------
+        # STAGE 1: KNOWLEDGE BASE ROUTING
+        # ------------------------------------------
+
+        routing_start = time.perf_counter()
+
+        with tracer.start_as_current_span(
+            "rag.routing"
+        ) as span:
+
+            selected = select_knowledge_bases(question)
+
+            span.set_attribute(
+                "rag.selected_knowledge_bases",
+                ",".join(selected),
+            )
+
+        routing_duration = time.perf_counter() - routing_start
+
+        logger.info(
+            "Knowledge base routing completed",
+            extra={
+                "request_id": request_id,
+                "stage": "routing",
+                "selected_knowledge_bases": selected,
+                "duration_seconds": round(routing_duration, 4),
+            },
         )
 
-        response = generate_answer(question, evidence)
+        # ------------------------------------------
+        # RAG INITIALIZATION
+        # ------------------------------------------
+
+        with tracer.start_as_current_span(
+            "rag.initialization"
+        ):
+            rag = get_rag()
+
+        # ------------------------------------------
+        # STAGE 2: DOCUMENT RETRIEVAL
+        # ------------------------------------------
+
+        retrieval_start = time.perf_counter()
+
+        with tracer.start_as_current_span(
+            "rag.retrieval"
+        ) as span:
+
+            evidence = rag.search(
+                question,
+                knowledge_bases=selected,
+                top_k=payload.top_k,
+            )
+
+            span.set_attribute(
+                "rag.evidence_count",
+                len(evidence),
+            )
+
+            span.set_attribute(
+                "rag.selected_knowledge_bases",
+                ",".join(selected),
+            )
+
+        retrieval_duration = time.perf_counter() - retrieval_start
+
+        logger.info(
+            "Document retrieval completed",
+            extra={
+                "request_id": request_id,
+                "stage": "retrieval",
+                "evidence_count": len(evidence),
+                "selected_knowledge_bases": selected,
+                "duration_seconds": round(retrieval_duration, 4),
+            },
+        )
+
+        # ------------------------------------------
+        # STAGE 3: LLM ANSWER GENERATION
+        # ------------------------------------------
+
+        generation_start = time.perf_counter()
+
+        with tracer.start_as_current_span(
+            "rag.generation"
+        ) as span:
+
+            response = generate_answer(question, evidence)
+
+            token_usage = response.get("token_usage") or {}
+
+            span.set_attribute(
+                "gen_ai.usage.input_tokens",
+                token_usage.get("input_tokens") or 0,
+            )
+
+            span.set_attribute(
+                "gen_ai.usage.output_tokens",
+                token_usage.get("output_tokens") or 0,
+            )
+
+            span.set_attribute(
+                "rag.grounded",
+                bool(response.get("grounded")),
+            )
+
+        generation_duration = time.perf_counter() - generation_start
+
+        logger.info(
+            "Answer generation completed",
+            extra={
+                "request_id": request_id,
+                "stage": "generation",
+                "duration_seconds": round(generation_duration, 4),
+                "input_tokens": token_usage.get("input_tokens"),
+                "output_tokens": token_usage.get("output_tokens"),
+                "total_tokens": token_usage.get("total_tokens"),
+            },
+        )
+
+        # ------------------------------------------
+        # COMPLETE PIPELINE
+        # ------------------------------------------
+
+        pipeline_duration = time.perf_counter() - pipeline_start
+
+        logger.info(
+            "RAG pipeline completed",
+            extra={
+                "request_id": request_id,
+                "stage": "complete",
+                "duration_seconds": round(pipeline_duration, 4),
+                "evidence_count": len(evidence),
+                "selected_knowledge_bases": selected,
+            },
+        )
 
     except ValueError as exc:
+
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),

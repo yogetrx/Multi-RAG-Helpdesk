@@ -2,292 +2,104 @@
 
 An AI-powered IT helpdesk application that routes user questions across multiple knowledge bases, retrieves relevant evidence using semantic search, and generates grounded answers with source citations.
 
-Built with Python, FastAPI, FAISS, Azure OpenAI, and OpenTelemetry. The application also integrates with Azure Application Insights for monitoring, distributed tracing, and observability.
-
-## Features
-
-- **Multi-knowledge-base routing:** Selects relevant knowledge bases based on the user's question.
-- **Semantic retrieval:** Uses Sentence Transformers embeddings and FAISS vector search.
-- **Evidence fusion:** Combines retrieved evidence for answer generation.
-- **Grounded answers:** Generates responses using retrieved context and provides source citations.
-- **Abstention and safety evaluation:** Includes tests for unsupported questions, adversarial inputs, and prompt-injection attempts.
-- **Token usage tracking:** Captures input, output, and total token consumption.
-- **API security:** Implements API-key authentication and request rate limiting.
-- **Structured logging:** Produces JSON logs containing request IDs, processing stages, and execution durations.
-- **Distributed tracing:** Instruments individual RAG pipeline stages using OpenTelemetry.
-- **Azure monitoring:** Exports telemetry to Azure Application Insights.
-- **Automated testing:** Includes authentication, logging, routing, and application tests.
+The project combines a **React + TypeScript frontend**, **FastAPI backend**, **FAISS vector search**, and **Azure OpenAI**. It also includes API authentication, rate limiting, automated testing, distributed tracing, and Azure deployment support.
 
 ## Architecture
 
 ```text
-                    User Question
-                         |
-                         v
-                  FastAPI /ask API
-                         |
-                         v
-                 API Authentication
-                         |
-                         v
-                  Rate Limiting
-                         |
-                         v
-                Knowledge-Base Router
-                         |
-                         v
-                 Relevant Knowledge
-                    Base Selection
-                         |
-                         v
-                   FAISS Retrieval
-                         |
-                         v
-                   Evidence Fusion
-                         |
-                         v
-                Azure OpenAI Generation
-                         |
-                         v
-              Grounding and Citation Checks
-                         |
-                         v
-             Answer + Citations + Token Usage
+                 User
+                  |
+                  v
+          React + TypeScript UI
+                  |
+                  v
+           Vite API Proxy
+                  |
+                  v
+             FastAPI API
+                  |
+                  v
+          API Authentication
+                  |
+                  v
+            Rate Limiting
+                  |
+                  v
+        Multi-Knowledge-Base Router
+                  |
+                  v
+           FAISS Retrieval
+                  |
+                  v
+            Evidence Fusion
+                  |
+                  v
+        Azure OpenAI Generation
+                  |
+                  v
+       Grounding and Citation Checks
+                  |
+                  v
+       Answer + Citations + Metadata
+                  |
+                  v
+             React UI
 ```
 
-## Observability Architecture
+## Key Features
 
-The application uses OpenTelemetry to monitor the execution of its RAG pipeline and Azure Application Insights to collect and analyze telemetry.
+- **Multi-RAG architecture:** Routes questions across multiple knowledge bases.
+- **Semantic retrieval:** Uses Sentence Transformers embeddings and FAISS.
+- **Evidence fusion:** Combines retrieved evidence for answer generation.
+- **Grounded responses:** Generates answers using retrieved context and provides source citations.
+- **Abstention:** Supports handling questions that cannot be answered from available evidence.
+- **Token usage tracking:** Captures input, output, and total token consumption.
+- **API security:** Implements API-key authentication.
+- **Rate limiting:** Protects the API using SlowAPI.
+- **Structured logging:** Produces JSON logs with request IDs, processing stages, and execution durations.
+- **Distributed tracing:** Instruments individual RAG pipeline stages using OpenTelemetry.
+- **Azure monitoring integration:** Supports exporting telemetry to Azure Application Insights.
+- **Automated testing:** Includes backend tests and evaluation scripts.
+- **React dashboard:** Provides an interactive interface for asking questions and viewing answers, citations, grounding status, and token usage.
 
-### 1. OpenTelemetry Integration
+## Frontend
 
-The project uses Microsoft's OpenTelemetry distribution to configure telemetry collection and Azure Monitor integration.
+The frontend is built using:
 
-The observability implementation is located in:
-
-```text
-src/
-└── helpdesk/
-    └── observability.py
-```
-
-The application initializes observability before obtaining its application tracer.
-
-Telemetry is exported when a valid Application Insights connection string is configured.
-
-### 2. RAG Pipeline Distributed Tracing
-
-The application creates custom spans around individual processing stages.
-
-| Span | Responsibility |
+| Technology | Purpose |
 |---|---|
-| `rag.routing` | Records knowledge-base selection. |
-| `rag.initialization` | Records RAG system initialization. |
-| `rag.retrieval` | Records document retrieval and evidence count. |
-| `rag.generation` | Records LLM generation and associated metadata. |
+| React | User interface |
+| TypeScript | Type safety |
+| Vite | Development server and build tooling |
+| Tailwind CSS | Styling |
+| ESLint | Code quality |
 
-These spans help identify which stage contributes to application latency.
+### Frontend capabilities
 
-### 3. LLM Generation Monitoring
+- Interactive helpdesk dashboard.
+- Chat-based question submission.
+- Suggested questions.
+- Answer rendering.
+- Source citation display.
+- Grounding status display.
+- Token usage information.
+- Loading and error states.
 
-The `rag.generation` span records custom attributes:
+**Current limitation:** The knowledge-base navigation in the UI is not yet connected to backend routing. The backend automatically selects relevant knowledge bases based on the question.
 
-| Attribute | Description |
-|---|---|
-| `gen_ai.usage.input_tokens` | Number of input tokens. |
-| `gen_ai.usage.output_tokens` | Number of output tokens. |
-| `rag.grounded` | Whether the generated answer passed the application's grounding check. |
+## Backend
 
-The application also receives automatic model and HTTP dependency telemetry through its instrumentation.
+The backend uses FastAPI to expose the RAG functionality through HTTP endpoints.
 
-### 4. Structured JSON Logging
+### Main API endpoints
 
-The application generates structured logs containing information such as:
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/health` | GET | Application health check |
+| `/ask` | POST | Submit a question to the Multi-RAG pipeline |
+| `/docs` | GET | Interactive API documentation |
 
-- Timestamp
-- Log level
-- Request ID
-- HTTP method and path
-- Response status
-- Pipeline stage
-- Selected knowledge bases
-- Evidence count
-- Execution duration
-- Input and output token usage
-
-Each HTTP request receives a unique request ID, which is also returned in the `X-Request-ID` response header.
-
-### 5. Azure Application Insights
-
-Application telemetry is exported to Azure Application Insights.
-
-The monitoring implementation supports:
-
-- Request monitoring
-- Dependency tracking
-- Custom RAG spans
-- LLM generation timing
-- Token usage metadata
-- Grounding metadata
-- Distributed operation correlation
-
-**Observed verification:** The generation span and its custom attributes were successfully observed in Application Insights. The distributed trace also showed the relationship between the custom generation span and the model dependency.
-
-### 6. Useful Application Insights KQL Queries
-
-**Find RAG generation spans:**
-
-```kusto
-dependencies
-| where timestamp > ago(30m)
-| where name == "rag.generation"
-| project timestamp, name, duration, success, operation_Id
-| order by timestamp desc
-```
-
-**Inspect generation attributes:**
-
-```kusto
-dependencies
-| where name == "rag.generation"
-| extend attributes = customDimensions
-| project timestamp, name, duration, attributes
-| order by timestamp desc
-```
-
-**Inspect an entire distributed trace:**
-
-```kusto
-dependencies
-| where operation_Id == "YOUR_OPERATION_ID"
-| project timestamp, name, type, duration, success, operation_ParentId
-| order by timestamp asc
-```
-
-Replace `YOUR_OPERATION_ID` with the operation ID of the request being investigated.
-
-## API Security and Rate Limiting
-
-### 1. API Key Authentication
-
-The `/ask` endpoint is protected using API-key authentication.
-
-Clients must provide a valid API key through the `X-API-Key` HTTP request header.
-
-```http
-X-API-Key: YOUR_API_KEY
-```
-
-The application:
-
-- Reads the expected API key from `HELPDESK_API_KEY`.
-- Rejects missing or invalid API keys with HTTP `401 Unauthorized`.
-- Returns HTTP `503 Service Unavailable` if authentication is not configured.
-- Uses `secrets.compare_digest()` for API-key comparison.
-
-### 2. Rate Limiting
-
-The application uses SlowAPI.
-
-| Configuration | Value |
-|---|---|
-| Rate limit | 10 requests |
-| Time window | 1 minute |
-| Rate-limit identity | SHA-256 hash of API key |
-| Storage backend | In-memory |
-| Exceeding limit | HTTP 429 |
-
-The in-memory implementation has limitations when running multiple application replicas because counters are not shared.
-
-Redis or Azure API Management can be considered for centralized rate limiting.
-
-## Knowledge Bases
-
-The sample IT helpdesk knowledge bases cover:
-
-- **Troubleshooting:** VPN Error 809.
-- **Access Policies:** Azure access guidance.
-- **IT Documentation:** Support procedures.
-
-These documents are illustrative examples, not authoritative organizational policies.
-
-## Technology Stack
-
-| Category | Technology |
-|---|---|
-| Language | Python |
-| API framework | FastAPI |
-| Vector search | FAISS |
-| Embeddings | Sentence Transformers |
-| LLM | Azure OpenAI |
-| API rate limiting | SlowAPI |
-| Observability | OpenTelemetry |
-| Monitoring | Azure Application Insights |
-| Testing | pytest |
-| Containerization | Docker |
-| Cloud deployment | Azure Container Apps |
-
-## Getting Started
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/yogetrx/Multi-RAG-Helpdesk.git
-cd Multi-RAG-Helpdesk
-```
-
-### 2. Create a virtual environment
-
-On Windows PowerShell:
-
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-### 3. Configure environment variables
-
-Create a local `.env` file using `.env.example` as a reference.
-
-Configure the required application settings:
-
-```env
-AZURE_OPENAI_ENDPOINT=YOUR_AZURE_OPENAI_ENDPOINT
-AZURE_OPENAI_API_KEY=YOUR_AZURE_OPENAI_API_KEY
-AZURE_OPENAI_CHAT_DEPLOYMENT=YOUR_DEPLOYMENT_NAME
-
-HELPDESK_API_KEY=YOUR_LOCAL_API_KEY
-```
-
-For Azure Application Insights telemetry, configure:
-
-```env
-APPLICATIONINSIGHTS_CONNECTION_STRING=YOUR_APPLICATION_INSIGHTS_CONNECTION_STRING
-```
-
-Observability export is disabled when the Application Insights connection string is missing.
-
-Never commit `.env` or expose credentials in source code.
-
-### 4. Start the API
-
-```powershell
-python -m uvicorn helpdesk.main:app --app-dir src --reload
-```
-
-Interactive API documentation:
-
-http://127.0.0.1:8000/docs
-
-### 5. Check application health
-
-```http
-GET /health
-```
-
-### 6. Ask a question
+### Example request
 
 ```http
 POST /ask
@@ -306,48 +118,353 @@ Request body:
 
 The response contains:
 
-- Original question
-- Selected knowledge bases
-- Generated answer
-- Source citations
-- Grounding status
-- Token usage, when available
+- Original question.
+- Selected knowledge bases.
+- Generated answer.
+- Source citations.
+- Grounding status.
+- Token usage, when available.
+
+## Multi-RAG Pipeline
+
+The backend contains three sample knowledge bases:
+
+| Knowledge base | Example content |
+|---|---|
+| Troubleshooting | VPN Error 809 |
+| Access Policies | Azure access guidance |
+| IT Documentation | IT support procedures |
+
+The pipeline works as follows:
+
+1. Receives a user question.
+2. Authenticates the API request.
+3. Applies rate limiting.
+4. Selects relevant knowledge bases.
+5. Generates embeddings for retrieval.
+6. Searches FAISS for relevant documents.
+7. Combines retrieved evidence.
+8. Sends the evidence to Azure OpenAI.
+9. Checks grounding and generates citations.
+10. Returns the answer and metadata.
+
+The sample knowledge-base documents are illustrative examples, not authoritative organizational policies.
+
+## Observability Architecture
+
+The project integrates OpenTelemetry with Azure Monitor and Application Insights.
+
+### OpenTelemetry
+
+The observability implementation is located in:
+
+```text
+src/
+└── helpdesk/
+    └── observability.py
+```
+
+The application instruments individual RAG pipeline stages.
+
+| Span | Responsibility |
+|---|---|
+| `rag.routing` | Knowledge-base selection |
+| `rag.initialization` | RAG system initialization |
+| `rag.retrieval` | Document retrieval and evidence count |
+| `rag.generation` | LLM generation and associated metadata |
+
+These spans help identify which pipeline stages contribute to application latency.
+
+### LLM Generation Monitoring
+
+The `rag.generation` span records custom attributes:
+
+| Attribute | Description |
+|---|---|
+| `gen_ai.usage.input_tokens` | Input token count |
+| `gen_ai.usage.output_tokens` | Output token count |
+| `rag.grounded` | Grounding-check result |
+
+### Structured Logging
+
+The application produces structured logs containing:
+
+- Timestamp and log level.
+- Request ID.
+- HTTP method and path.
+- Response status.
+- Pipeline stage.
+- Selected knowledge bases.
+- Evidence count.
+- Execution duration.
+- Token usage.
+
+Each HTTP request receives a unique request ID, returned in the `X-Request-ID` response header.
+
+### Azure Application Insights
+
+Telemetry export is supported when a valid Application Insights connection string is configured.
+
+The integration supports:
+
+- Request monitoring.
+- Dependency tracking.
+- Custom RAG spans.
+- LLM generation timing.
+- Token usage metadata.
+- Grounding metadata.
+- Distributed operation correlation.
+
+Actual telemetry availability depends on the deployment configuration and successful export.
+
+### Useful KQL Queries
+
+Find RAG generation spans:
+
+```kusto
+dependencies
+| where timestamp > ago(30m)
+| where name == "rag.generation"
+| project timestamp, name, duration, success, operation_Id
+| order by timestamp desc
+```
+
+Inspect generation attributes:
+
+```kusto
+dependencies
+| where name == "rag.generation"
+| extend attributes = customDimensions
+| project timestamp, name, duration, attributes
+| order by timestamp desc
+```
+
+Inspect a distributed trace:
+
+```kusto
+dependencies
+| where operation_Id == "YOUR_OPERATION_ID"
+| project timestamp, name, type, duration, success, operation_ParentId
+| order by timestamp asc
+```
+
+Replace `YOUR_OPERATION_ID` with the operation ID of the request being investigated.
+
+## API Security and Rate Limiting
+
+### API-Key Authentication
+
+The `/ask` endpoint uses API-key authentication.
+
+Clients must provide a valid key through:
+
+```http
+X-API-Key: YOUR_API_KEY
+```
+
+The application:
+
+- Reads the expected key from `HELPDESK_API_KEY`.
+- Rejects missing or invalid keys with HTTP 401.
+- Returns HTTP 503 if authentication is not configured.
+- Uses `secrets.compare_digest()` for API-key comparison.
+
+### Rate Limiting
+
+The application uses SlowAPI.
+
+| Configuration | Value |
+|---|---|
+| Rate limit | 10 requests |
+| Time window | 1 minute |
+| Rate-limit identity | SHA-256 hash of API key |
+| Storage | In-memory |
+| Exceeding limit | HTTP 429 |
+
+The in-memory implementation does not share counters across application replicas. Redis or Azure API Management can be considered for centralized rate limiting.
+
+**Frontend security:** The Vite proxy adds the API key on the server side during local development. Never put a permanent backend API key into React code or expose it through a `VITE_` environment variable. A production frontend requires a secure server-side authentication/proxy design.
+
+## Technology Stack
+
+| Category | Technology |
+|---|---|
+| Frontend | React, TypeScript |
+| Frontend tooling | Vite |
+| Styling | Tailwind CSS |
+| Backend | Python, FastAPI |
+| Embeddings | Sentence Transformers |
+| Vector search | FAISS |
+| LLM | Azure OpenAI |
+| API rate limiting | SlowAPI |
+| Observability | OpenTelemetry |
+| Monitoring | Azure Application Insights |
+| Testing | pytest, ESLint |
+| Containerization | Docker |
+| CI | GitHub Actions |
+| Container registry | GitHub Container Registry |
+| Cloud deployment | Azure Container Apps |
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.12
+- Node.js compatible with the Vite version in `frontend/package.json`
+- npm
+- Azure OpenAI deployment
+- Git
+
+### 1. Clone the repository
+
+```powershell
+git clone https://github.com/yogetrx/Multi-RAG-Helpdesk.git
+cd Multi-RAG-Helpdesk
+```
+
+### 2. Configure the backend
+
+Create and activate a virtual environment:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Create a local `.env` file using `.env.example` as a reference.
+
+Configure:
+
+```env
+AZURE_OPENAI_ENDPOINT=YOUR_AZURE_OPENAI_ENDPOINT
+AZURE_OPENAI_API_KEY=YOUR_AZURE_OPENAI_API_KEY
+AZURE_OPENAI_CHAT_DEPLOYMENT=YOUR_DEPLOYMENT_NAME
+HELPDESK_API_KEY=YOUR_LOCAL_API_KEY
+```
+
+For Application Insights telemetry:
+
+```env
+APPLICATIONINSIGHTS_CONNECTION_STRING=YOUR_APPLICATION_INSIGHTS_CONNECTION_STRING
+```
+
+Telemetry export is disabled when the connection string is missing.
+
+Never commit `.env` files or expose credentials in source code.
+
+### 3. Start the backend
+
+From the repository root:
+
+```powershell
+python -m uvicorn helpdesk.main:app --app-dir src --reload
+```
+
+API documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+### 4. Configure and start the frontend
+
+Open a second terminal:
+
+```powershell
+cd frontend
+npm install
+```
+
+Create `frontend/.env.local`:
+
+```env
+HELPDESK_BACKEND_URL=http://127.0.0.1:8000
+HELPDESK_API_KEY=YOUR_LOCAL_API_KEY
+```
+
+Use the same local API key configured in the backend `.env`.
+
+Start the frontend:
+
+```powershell
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+The Vite development proxy forwards `/api` requests to the backend and attaches the API key server-side.
+
+Keep `.env.local` private. It must never be committed.
+
+### 5. Frontend quality checks
+
+Run ESLint:
+
+```powershell
+npm run lint
+```
+
+Run a production build:
+
+```powershell
+npm run build
+```
+
+Preview the production build locally:
+
+```powershell
+npm run preview
+```
 
 ## Running with Docker
 
-The project includes a portable Docker build using CPU-only PyTorch.
+The backend includes a portable Docker build using CPU-only PyTorch.
 
-### Build the image
+Build:
 
 ```powershell
 docker build --no-cache -f Dockerfile.portable -t multi-rag-helpdesk:latest .
 ```
 
-### Run the container
+Run:
 
 ```powershell
 docker run --rm -p 8000:8000 --env-file .env multi-rag-helpdesk:latest
 ```
 
-Verify the application:
+Verify:
 
+```text
 http://127.0.0.1:8000/health
+```
 
 ## Testing and Evaluation
 
-Run the automated tests:
+Run backend tests from the repository root:
 
 ```powershell
 python -m pytest -q
 ```
 
-Run the regression evaluation:
+Run regression evaluation:
 
 ```powershell
 python evaluation/run_regression_suite.py
 ```
 
-Run the performance evaluation:
+Run performance evaluation:
 
 ```powershell
 python evaluation/run_performance_evaluation.py
@@ -357,33 +474,47 @@ The evaluation suite covers routing, retrieval, answer quality, abstention, grou
 
 Passing tests does not establish production-level reliability or security.
 
-## Deployment
+## CI/CD and Deployment
 
-The application has been deployed using Azure Container Apps.
+The backend is deployed using Azure Container Apps.
 
-The deployed application uses Azure OpenAI for answer generation and Azure Application Insights for monitoring.
+The project uses GitHub Actions to run automated tests and build and publish the Docker image to GitHub Container Registry.
 
-Production credentials are configured separately from the source code.
+**Important:** The current GitHub Actions workflow does not automatically deploy the new image to Azure Container Apps. Azure deployment is a separate step.
+
+Production credentials are configured separately from source code.
+
+The React frontend currently runs locally. Production frontend hosting and a secure production authentication/proxy architecture remain future work.
 
 ## Project Status
 
-This is an evolving AI engineering portfolio project.
-
-Current implementation includes:
+Implemented:
 
 - Multi-knowledge-base RAG architecture.
 - Semantic retrieval using FAISS.
 - Azure OpenAI answer generation.
 - Citation and grounding checks.
-- API authentication and rate limiting.
+- API-key authentication.
+- Request rate limiting.
 - Structured application logging.
 - OpenTelemetry distributed tracing.
-- Azure Application Insights integration.
+- Application Insights integration.
 - Docker-based application packaging.
-- Azure Container Apps deployment.
-- Automated testing and evaluation.
+- Azure Container Apps backend deployment.
+- GitHub Actions CI workflow.
+- React and TypeScript frontend.
+- Frontend-to-backend integration through the local Vite proxy.
+- Automated backend tests.
 
-Future improvements can include centralized rate limiting, expanded monitoring dashboards, stronger evaluation pipelines, and additional knowledge bases.
+Future improvements:
+
+- Connect knowledge-base selection in the UI to actual backend routing.
+- Implement production-safe frontend authentication and API proxying.
+- Deploy the React frontend.
+- Verify production telemetry export.
+- Introduce centralized rate limiting.
+- Expand monitoring dashboards and evaluation pipelines.
+- Add more knowledge bases.
 
 ## Author
 

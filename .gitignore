@@ -25,3 +25,6 @@ otel-install-report*.json
 requirements-lock-candidate.txt
 # VS Code local workspace settings
 .vscode/
+# Node.js dependencies and build output
+node_modules/
+dist/

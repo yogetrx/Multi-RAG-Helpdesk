@@ -18,7 +18,7 @@ from fastapi import (
     status,
 )
 from fastapi.security import APIKeyHeader
-
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -75,6 +75,26 @@ app = FastAPI(
     version="0.5.0",
 )
 
+# --------------------------------------------------
+# CORS CONFIGURATION
+# --------------------------------------------------
+
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173"
+    ).split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key"],
+)
 
 # --------------------------------------------------
 # STRUCTURED JSON LOGGING

@@ -34,6 +34,9 @@ type Message = {
   error?: string
 }
 
+const API_URL =
+  'https://multi-rag-helpdesk.icywater-8c92ac16.southindia.azurecontainerapps.io/ask'
+
 const knowledgeBases: {
   id: KnowledgeBase
   name: string
@@ -64,6 +67,8 @@ function App() {
   const [selectedKB, setSelectedKB] =
     useState<KnowledgeBase>('troubleshooting')
 
+  const [apiKey, setApiKey] = useState('')
+  const [apiKeyVisible, setApiKeyVisible] = useState(false)
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -76,8 +81,14 @@ function App() {
     event.preventDefault()
 
     const trimmedQuestion = question.trim()
+    const trimmedApiKey = apiKey.trim()
 
     if (!trimmedQuestion || isLoading) return
+
+    if (!trimmedApiKey) {
+      alert('Please enter your backend API key first.')
+      return
+    }
 
     const messageId = Date.now()
 
@@ -93,10 +104,11 @@ function App() {
     setIsLoading(true)
 
     try {
-      const apiResponse = await fetch('/api/ask', {
+      const apiResponse = await fetch(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-API-Key': trimmedApiKey,
         },
         body: JSON.stringify({
           question: trimmedQuestion,
@@ -107,10 +119,21 @@ function App() {
       if (!apiResponse.ok) {
         const errorBody = await apiResponse.json().catch(() => null)
 
-        throw new Error(
+        let errorMessage =
           errorBody?.detail ||
-            `Request failed with status ${apiResponse.status}`,
-        )
+          `Request failed with status ${apiResponse.status}`
+
+        if (apiResponse.status === 401) {
+          errorMessage = 'Invalid API key. Please check your credentials.'
+        } else if (apiResponse.status === 429) {
+          errorMessage =
+            'Rate limit exceeded. Please wait before trying again.'
+        } else if (apiResponse.status >= 500) {
+          errorMessage =
+            'Backend server error. Please try again later.'
+        }
+
+        throw new Error(errorMessage)
       }
 
       const data: AskResponse = await apiResponse.json()
@@ -186,12 +209,44 @@ function App() {
           ))}
         </div>
 
+        <div className="api-key-section">
+          <p className="section-label">API CONFIGURATION</p>
+
+          <label htmlFor="api-key">Backend API Key</label>
+
+          <div className="api-key-input-wrapper">
+            <input
+              id="api-key"
+              type={apiKeyVisible ? 'text' : 'password'}
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder="Enter your API key"
+              autoComplete="off"
+              spellCheck={false}
+            />
+
+            <button
+              type="button"
+              onClick={() =>
+                setApiKeyVisible((visible) => !visible)
+              }
+              aria-label={apiKeyVisible ? 'Hide API key' : 'Show API key'}
+            >
+              {apiKeyVisible ? 'Hide' : 'Show'}
+            </button>
+          </div>
+
+          <small>
+            Key is held in browser memory only. It is not saved by this app.
+          </small>
+        </div>
+
         <div className="sidebar-bottom">
           <div className="system-status">
             <span className="status-dot" />
             <div>
               <strong>Azure backend</strong>
-              <small>Connection configured</small>
+              <small>Direct API connection</small>
             </div>
           </div>
 
@@ -214,7 +269,7 @@ function App() {
 
           <div className="topbar-right">
             <span className="environment-badge">
-              ● Development
+              ● Azure Demo
             </span>
             <div className="topbar-avatar">MR</div>
           </div>
@@ -363,7 +418,9 @@ function App() {
                   <div className="message-avatar">✦</div>
                   <div className="message-body">
                     <strong>Multi-RAG AI</strong>
-                    <p>Searching knowledge bases and generating an answer...</p>
+                    <p>
+                      Searching knowledge bases and generating an answer...
+                    </p>
                   </div>
                 </div>
               )}
@@ -388,9 +445,7 @@ function App() {
             />
 
             <div className="composer-bottom">
-              <span>
-                ✦ Multi-RAG automatic routing
-              </span>
+              <span>✦ Multi-RAG automatic routing</span>
 
               <button
                 type="submit"

@@ -4,8 +4,9 @@ import statistics
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-
+import os
 import requests
+
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,10 @@ REPORT_DIR = ROOT / "evaluation" / "reports"
 
 API_URL = "http://127.0.0.1:8000/ask"
 HEALTH_URL = "http://127.0.0.1:8000/health"
+
+API_KEY = os.getenv("HELPDESK_API_KEY", "")
+
+HEADERS = {"X-API-Key": API_KEY}
 
 TOP_K = 3
 WARMUP_REQUESTS = 1
@@ -55,6 +60,7 @@ def send_question(question):
         response = requests.post(
             API_URL,
             json=payload,
+            headers=HEADERS,
             timeout=120,
         )
 

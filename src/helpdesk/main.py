@@ -6,10 +6,8 @@ import hashlib
 import logging
 import time
 import json
-
 from datetime import datetime, timezone
 from functools import lru_cache
-
 from fastapi import (
     Depends,
     FastAPI,
@@ -33,7 +31,8 @@ from helpdesk.schemas import (
     AskResponse,
     HealthResponse,
 )
-
+from dotenv import load_dotenv
+load_dotenv()
 
 # --------------------------------------------------
 # API RATE LIMITING
@@ -333,10 +332,36 @@ def ask(request: Request, payload: AskRequest) -> AskResponse:
         # RAG INITIALIZATION
         # ------------------------------------------
 
+        # ------------------------------------------
+        # RAG INITIALIZATION
+        # ------------------------------------------
+
+        initialization_start = time.perf_counter()
+
         with tracer.start_as_current_span(
             "rag.initialization"
-        ):
+        ) as span:
             rag = get_rag()
+
+        initialization_duration = (
+            time.perf_counter() - initialization_start
+        )
+
+        span.set_attribute(
+            "rag.initialization.duration_seconds",
+            initialization_duration,
+        )
+
+        logger.info(
+            "RAG initialization completed",
+            extra={
+                "request_id": request_id,
+                "stage": "initialization",
+                "duration_seconds": round(
+                    initialization_duration, 4
+                ),
+            },
+        )
 
         # ------------------------------------------
         # STAGE 2: DOCUMENT RETRIEVAL

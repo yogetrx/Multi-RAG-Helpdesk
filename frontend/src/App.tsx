@@ -33,7 +33,13 @@ type Message = {
   error?: string
 }
 
-const API_URL = '/api/ask'
+const API_URL = import.meta.env.DEV
+  ? '/api/ask'
+  : 'https://func-multirag-helpdesk.azurewebsites.net/api/ask'
+
+const HEALTH_URL = import.meta.env.DEV
+  ? '/api/health'
+  : 'https://func-multirag-helpdesk.azurewebsites.net/api/health'
 
 const knowledgeBases: {
   id: KnowledgeBase
@@ -81,7 +87,7 @@ function App() {
 
     const checkBackend = async () => {
       try {
-        const response = await fetch('/api/health', {
+        const response = await fetch(HEALTH_URL, {
           cache: 'no-store',
         })
 

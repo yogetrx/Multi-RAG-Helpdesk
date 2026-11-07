@@ -6,8 +6,10 @@ import hashlib
 import logging
 import time
 import json
+
 from datetime import datetime, timezone
 from functools import lru_cache
+
 from fastapi import (
     Depends,
     FastAPI,
@@ -15,24 +17,33 @@ from fastapi import (
     Request,
     status,
 )
+
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
+
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from opentelemetry import trace
 
+from dotenv import load_dotenv
+
 from helpdesk.observability import configure_observability
-from helpdesk.generation.answer import generate_answer
+from helpdesk.generation.answer import (
+    generate_answer,
+    contextualize_question,
+)
 from helpdesk.multi_rag import MultiRAG
-from helpdesk.router import select_knowledge_bases
+from helpdesk.router import match_knowledge_bases
+
 from helpdesk.schemas import (
     AskRequest,
     AskResponse,
     HealthResponse,
 )
-from dotenv import load_dotenv
+
 load_dotenv()
+
 
 # --------------------------------------------------
 # API RATE LIMITING
@@ -74,6 +85,7 @@ app = FastAPI(
     version="0.5.0",
 )
 
+
 # --------------------------------------------------
 # CORS CONFIGURATION
 # --------------------------------------------------
@@ -82,7 +94,7 @@ allowed_origins = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173"
+        "http://localhost:5173",
     ).split(",")
     if origin.strip()
 ]
@@ -94,6 +106,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key"],
 )
+
 
 # --------------------------------------------------
 # STRUCTURED JSON LOGGING
@@ -122,6 +135,7 @@ class JSONFormatter(logging.Formatter):
             "input_tokens",
             "output_tokens",
             "total_tokens",
+            "answer_mode",
         ):
             if hasattr(record, field):
                 log_data[field] = getattr(record, field)
@@ -297,19 +311,45 @@ def ask(request: Request, payload: AskRequest) -> AskResponse:
             detail="Question cannot be blank.",
         )
 
+    # Convert validated Pydantic history into dictionaries.
+    conversation_history = [
+        message.model_dump()
+        for message in payload.conversation_history
+    ]
+
+    # Use recent user messages to resolve short follow-up questions.
+    previous_user_questions = [
+        message["content"]
+        for message in conversation_history
+        if message["role"] == "user"
+    ][-4:]
+
+    # Contextualize the current question for document retrieval.
+    retrieval_question = contextualize_question(
+        query=question,
+        conversation_history=conversation_history,
+    )
+
+    # Use the contextualized question for knowledge-base routing.
+    routing_context = " ".join(
+        previous_user_questions + [retrieval_question]
+    )
+
     try:
 
-        # ------------------------------------------
-        # STAGE 1: KNOWLEDGE BASE ROUTING
-        # ------------------------------------------
+        # --------------------------------------------------
+        # STAGE 1: ROUTING
+        # --------------------------------------------------
 
         routing_start = time.perf_counter()
 
-        with tracer.start_as_current_span(
-            "rag.routing"
-        ) as span:
+        with tracer.start_as_current_span("rag.routing") as span:
 
-            selected = select_knowledge_bases(question)
+            selected = match_knowledge_bases(routing_context)
+
+            mode = "rag" if selected else "general"
+
+            span.set_attribute("rag.answer_mode", mode)
 
             span.set_attribute(
                 "rag.selected_knowledge_bases",
@@ -319,92 +359,83 @@ def ask(request: Request, payload: AskRequest) -> AskResponse:
         routing_duration = time.perf_counter() - routing_start
 
         logger.info(
-            "Knowledge base routing completed",
+            "Request routing completed",
             extra={
                 "request_id": request_id,
                 "stage": "routing",
+                "answer_mode": mode,
                 "selected_knowledge_bases": selected,
                 "duration_seconds": round(routing_duration, 4),
             },
         )
 
-        # ------------------------------------------
-        # RAG INITIALIZATION
-        # ------------------------------------------
+        # --------------------------------------------------
+        # STAGE 2: RETRIEVAL ONLY FOR RAG MODE
+        # --------------------------------------------------
 
-        # ------------------------------------------
-        # RAG INITIALIZATION
-        # ------------------------------------------
+        evidence = []
 
-        initialization_start = time.perf_counter()
+        if mode == "rag":
 
-        with tracer.start_as_current_span(
-            "rag.initialization"
-        ) as span:
-            rag = get_rag()
+            initialization_start = time.perf_counter()
 
-        initialization_duration = (
-            time.perf_counter() - initialization_start
-        )
+            with tracer.start_as_current_span(
+                "rag.initialization"
+            ) as span:
 
-        span.set_attribute(
-            "rag.initialization.duration_seconds",
-            initialization_duration,
-        )
+                rag = get_rag()
 
-        logger.info(
-            "RAG initialization completed",
-            extra={
-                "request_id": request_id,
-                "stage": "initialization",
-                "duration_seconds": round(
-                    initialization_duration, 4
-                ),
-            },
-        )
+                initialization_duration = (
+                    time.perf_counter() - initialization_start
+                )
 
-        # ------------------------------------------
-        # STAGE 2: DOCUMENT RETRIEVAL
-        # ------------------------------------------
+                span.set_attribute(
+                    "rag.initialization.duration_seconds",
+                    initialization_duration,
+                )
 
-        retrieval_start = time.perf_counter()
+            retrieval_start = time.perf_counter()
 
-        with tracer.start_as_current_span(
-            "rag.retrieval"
-        ) as span:
+            with tracer.start_as_current_span(
+                "rag.retrieval"
+            ) as span:
 
-            evidence = rag.search(
-                question,
-                knowledge_bases=selected,
-                top_k=payload.top_k,
+                evidence = rag.search(
+                    retrieval_question,
+                    knowledge_bases=selected,
+                    top_k=payload.top_k,
+                )
+
+                span.set_attribute(
+                    "rag.evidence_count",
+                    len(evidence),
+                )
+
+                span.set_attribute(
+                    "rag.selected_knowledge_bases",
+                    ",".join(selected),
+                )
+
+            retrieval_duration = (
+                time.perf_counter() - retrieval_start
             )
 
-            span.set_attribute(
-                "rag.evidence_count",
-                len(evidence),
+            logger.info(
+                "Document retrieval completed",
+                extra={
+                    "request_id": request_id,
+                    "stage": "retrieval",
+                    "evidence_count": len(evidence),
+                    "selected_knowledge_bases": selected,
+                    "duration_seconds": round(
+                        retrieval_duration, 4
+                    ),
+                },
             )
 
-            span.set_attribute(
-                "rag.selected_knowledge_bases",
-                ",".join(selected),
-            )
-
-        retrieval_duration = time.perf_counter() - retrieval_start
-
-        logger.info(
-            "Document retrieval completed",
-            extra={
-                "request_id": request_id,
-                "stage": "retrieval",
-                "evidence_count": len(evidence),
-                "selected_knowledge_bases": selected,
-                "duration_seconds": round(retrieval_duration, 4),
-            },
-        )
-
-        # ------------------------------------------
-        # STAGE 3: LLM ANSWER GENERATION
-        # ------------------------------------------
+        # --------------------------------------------------
+        # STAGE 3: ANSWER GENERATION
+        # --------------------------------------------------
 
         generation_start = time.perf_counter()
 
@@ -412,7 +443,12 @@ def ask(request: Request, payload: AskRequest) -> AskResponse:
             "rag.generation"
         ) as span:
 
-            response = generate_answer(question, evidence)
+            response = generate_answer(
+                query=question,
+                evidence=evidence,
+                conversation_history=conversation_history,
+                mode=mode,
+            )
 
             token_usage = response.get("token_usage") or {}
 
@@ -431,32 +467,42 @@ def ask(request: Request, payload: AskRequest) -> AskResponse:
                 bool(response.get("grounded")),
             )
 
-        generation_duration = time.perf_counter() - generation_start
+            span.set_attribute("rag.answer_mode", mode)
+
+        generation_duration = (
+            time.perf_counter() - generation_start
+        )
 
         logger.info(
             "Answer generation completed",
             extra={
                 "request_id": request_id,
                 "stage": "generation",
-                "duration_seconds": round(generation_duration, 4),
+                "answer_mode": mode,
+                "duration_seconds": round(
+                    generation_duration, 4
+                ),
                 "input_tokens": token_usage.get("input_tokens"),
                 "output_tokens": token_usage.get("output_tokens"),
                 "total_tokens": token_usage.get("total_tokens"),
             },
         )
 
-        # ------------------------------------------
+        # --------------------------------------------------
         # COMPLETE PIPELINE
-        # ------------------------------------------
+        # --------------------------------------------------
 
         pipeline_duration = time.perf_counter() - pipeline_start
 
         logger.info(
-            "RAG pipeline completed",
+            "Hybrid AI pipeline completed",
             extra={
                 "request_id": request_id,
                 "stage": "complete",
-                "duration_seconds": round(pipeline_duration, 4),
+                "answer_mode": mode,
+                "duration_seconds": round(
+                    pipeline_duration, 4
+                ),
                 "evidence_count": len(evidence),
                 "selected_knowledge_bases": selected,
             },

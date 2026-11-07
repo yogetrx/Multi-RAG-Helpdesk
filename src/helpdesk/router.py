@@ -33,12 +33,12 @@ def contains_keyword(text: str, keyword: str) -> bool:
     return re.search(pattern, text) is not None
 
 
-def select_knowledge_bases(query: str) -> list[str]:
-    """Select knowledge bases using keyword matching and routing rules."""
+def match_knowledge_bases(query: str) -> list[str]:
+    """Return only knowledge bases matching the query."""
     if not query or not query.strip():
         return []
 
-    text = query.lower()
+    text = query.casefold()
     selected = []
 
     for knowledge_base, keywords in ROUTING_RULES.items():
@@ -46,8 +46,7 @@ def select_knowledge_bases(query: str) -> list[str]:
             selected.append(knowledge_base)
 
     # Avoid routing a simple Azure permission procedure question
-    # to general IT documentation unless it mentions a specific
-    # support workflow.
+    # to general IT documentation unless it mentions a support workflow.
     if (
         "it_documentation" in selected
         and "access_policies" in selected
@@ -58,5 +57,12 @@ def select_knowledge_bases(query: str) -> list[str]:
     ):
         selected.remove("it_documentation")
 
-    # If no rules match, search all available knowledge bases.
-    return selected or list(ROUTING_RULES.keys())
+    return selected
+
+
+def select_knowledge_bases(query: str) -> list[str]:
+    """Select knowledge bases while preserving legacy fallback behaviour."""
+    if not query or not query.strip():
+        return []
+
+    return match_knowledge_bases(query) or list(ROUTING_RULES.keys())

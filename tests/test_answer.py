@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from helpdesk.generation.answer import generate_answer
+from helpdesk.generation.answer import (
+    generate_answer,
+    contextualize_question,
+)
 
 
 def test_answer_includes_source_citations():
@@ -180,4 +183,80 @@ def test_answer_marks_unsupported_response_not_grounded():
 
     assert response["grounded"] is False
     assert "cannot be determined" in response["answer"].lower()
-    
+
+
+def test_contextualize_question_without_history():
+    result = contextualize_question(
+        "What should I try next?",
+        [],
+    )
+
+    assert result == "What should I try next?"
+
+
+def test_contextualize_question_rewrites_follow_up():
+    fake_response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=(
+                        "What additional troubleshooting steps "
+                        "can resolve VPN error 809?"
+                    )
+                )
+            )
+        ]
+    )
+
+    with patch(
+        "helpdesk.generation.answer.OpenAI"
+    ) as mock_openai, patch(
+        "helpdesk.generation.answer.settings.azure_openai_endpoint",
+        "https://example.openai.azure.com/",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_api_key",
+        "test-api-key",
+    ), patch(
+        "helpdesk.generation.answer.settings.azure_openai_chat_deployment",
+        "test-deployment",
+    ):
+        client = mock_openai.return_value
+        client.chat.completions.create.return_value = fake_response
+
+        result = contextualize_question(
+            "What should I try next?",
+            [
+                {
+                    "role": "user",
+                    "content": "How do I fix VPN error 809?",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Check your VPN settings.",
+                },
+            ],
+        )
+
+    assert result == (
+        "What additional troubleshooting steps "
+        "can resolve VPN error 809?"
+    )
+    client.chat.completions.create.assert_called_once()
+
+
+def test_contextualize_question_falls_back_on_api_error():
+    with patch(
+        "helpdesk.generation.answer.OpenAI",
+        side_effect=Exception("Simulated API failure"),
+    ):
+        result = contextualize_question(
+            "What should I try next?",
+            [
+                {
+                    "role": "user",
+                    "content": "How do I fix VPN error 809?",
+                }
+            ],
+        )
+
+    assert result == "What should I try next?"

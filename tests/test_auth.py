@@ -37,10 +37,10 @@ def client(monkeypatch, request):
     monkeypatch.setattr(
         main,
         "generate_answer",
-        lambda question, evidence: {
+        lambda query, evidence=None, conversation_history=None, mode="rag": {
             "answer": "Test answer",
             "citations": [],
-            "grounded": True,
+            "grounded": mode == "rag",
             "token_usage": None,
         },
     )
